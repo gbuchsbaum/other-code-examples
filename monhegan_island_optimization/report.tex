@@ -1,0 +1,391 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage[per-mode=symbol]{siunitx}
+\usepackage{url}
+%\usepackage{amsmath}
+%\usepackage{bm}
+\usepackage{float}
+%\usepackage{enumitem}
+\usepackage{gensymb}
+%\usepackage{adjustbox}
+%\usepackage{caption}
+%\usepackage{placeins}
+%\usepackage{listings}
+%\usepackage{matlab-prettifier}
+%\usepackage{appendix}
+
+\title{Design of a Sustainable Microgrid for Monhegan Island}
+\author{Gabriel Buchsbaum}
+\date{March 19, 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Electricity access on islands is a profoundly difficult issue.  In many cases, the islands may be too far from the mainland to be able to extend a cable linking it to the main grid.  Additionally, islands are often too small to use utility-scale generators that can provide power at a reasonable cost.  As a result, these islands are usually forced to rely on diesel generators, and have outrageously high electricity costs.  However, recent advancements in renewable energy and battery storage technologies has helped dramatically lower their costs.  As a result, interest in using sustainable microgrid technology to provide power on islands is rapidly growing.
+
+One example of an island that could benefit from a renewable microgrid is Monhegan Island in Maine.  This is a small (513 acre) island 12 miles off the coast and completely separated from the grid.  With a year-round population of only 70 people, there is no ability to use larger, more cost-efficient generators.  Additionally, the island is a popular vacation destination, and the population swells to around 250 people over the summer, with a corresponding increase in the load shown in Figures \ref{fig:winter_load} and \ref{fig:summer_load}.  The net result of these factors is that Monhegan Island has some of the most expensive electricity in the country: \$0.70 per kWh, or 617\% of the US average.\cite{NE_Energy_Reports}
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.6\textwidth]{winter_load.png}
+\caption{Monhegan Island winter load \cite{Monhegan_Presentation}}
+\label{fig:winter_load}
+\end{center}
+\end{figure}
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.6\textwidth]{summer_load.png}
+\caption{Monhegan Island summer load \cite{Monhegan_Presentation}}
+\label{fig:summer_load}
+\end{center}
+\end{figure}
+
+This project seeks to develop a combination of renewable generation and storage that can supply all of Monhegan Island's power for as low a cost as possible.  The microgrid must be reliable enough to fulfill all of the residents needs, and it will ideally be far less expensive than the existing generators.
+
+\section{Methods}
+
+The microgrid design will consist of three major components: solar panels, wind turbines, and battery storage.  Ultimately, the model will determine the quantity of each of these that can provide the required power at all times at the lowest possible cost.  The model will also consider multiple options for solar panels and wind turbines, to improve the microgrid to its maximum capability.
+
+Solar panel options:
+\begin{itemize}
+\item{Fixed-tilt}
+\item{Single-axis (north-south) tracking}
+\end{itemize}
+
+Wind turbine options, used to show the impact of different sizes:
+\begin{itemize}
+\item Jacobs Wind Electric 31-20 (20 kW) \cite{20kW}
+\item Huaya 30 kW Pitch Controlled WTG \cite{30kW}
+\item Ergycon ely50 (50 kW) \cite{50kW}
+\item DeimosWind DT 2160 (60 kW) \cite{60kW}
+\item Northern Power Systems NPS 100 (100 kW) \cite{100kW}
+\end{itemize}
+
+The model works by simulating a full year of the microgrid.  This includes determining the solar and wind generation at each hour of the year, as well as the charging and discharging of the battery.  The total electricity supply must always be greater than or equal to the total load to ensure that residents can have reliable electricity access at all times of the year.  The model is based on 2013 data due to it being the only year in which solar, wind, and load data are all available.  While it is possible that data could be mixed between years, it is less than ideal due to the impact that weather has on loads.  For example, high loads due to air-conditioning use could be a result of multiple days of sun, or high heating loads could come in response to high wind speeds.
+
+\subsection{Solar Energy Modeling}
+
+Solar power depends greatly on the angle that sunlight reaches the panel, as solar panels have a larger effective area when perpendicular to the sun than when the sun is at a more extreme angle.  As such, it is critical to determine the angle of the sun throughout the day.  The following equations from Masters 2013 are used to determine solar position.\cite{Masters2013}  The first step is determining the Earth's tilt $\delta$ on a given day of the year $n$.  Note that for clarity, these equations use degrees, but the actual model code uses radians.
+
+\begin{equation}
+\delta = 23.45 \sin\left[\frac{360}{365} \left(n-81\right)\right]
+\label{eq:declination}
+\end{equation}
+
+The next step is finding the hour angle $H$, which represents the rotation of the Earth.  However, due to the difference in longitudes and the effect of the Earth's orbit, $H$ is not strictly based on clock time.  The solar day is affected by the equation of time $E$:
+
+\begin{equation}
+E = 9.87 \sin(2 B) - 7.53 \cos(B) - 1.5 \sin(B) \mbox{ [minutes]}
+\label{eq:eqn_time}
+\end{equation}
+
+where
+
+\begin{equation}
+B = \frac{360}{364}\left(n-81\right)\mbox{ [degrees]}
+\label{eq:eqn_time2}
+\end{equation}
+
+Finally,
+
+\begin{equation}
+\mbox{Solar Time} = \mbox{Clock Time} + \frac{\SI{4}{\minute}}{\mbox{degree}}\left(\mbox{Local Time Meridian} - \mbox{Local Longitude}\right)\degree + E\mbox{ [min]}
+\label{eq:solar_time}
+\end{equation}
+
+Using solar time,
+
+\begin{equation}
+H = \left(\frac{15\degree}{\mbox{hour}}\right)(\mbox{12:00 P.M.} - \mbox{Solar Time})
+\label{eq:hr_angle}
+\end{equation}
+
+Using latitude $L$, the solar altitude $\beta$ and azimuth $\phi_S$ can be determined as follows.  Note that this uses a convention of $\phi_S > 0$ when the sun is in the east, $\phi_S = 0$ when the sun is due south, and $\phi_S < 0$ when the sun is in the west, and that northern latitudes are positive.
+
+\begin{equation}
+\sin \beta = \cos L \cos \delta \cos H + \sin L \sin \delta
+\label{eq:altitude}
+\end{equation}
+
+\begin{equation}
+\sin \phi_S = \frac{\cos \delta \sin H}{\cos \beta}
+\label{eq:azimuth}
+\end{equation}
+
+Since the solar azimuth can extend more than 90\degree from south, it must be adjusted as follows:
+
+\begin{equation}
+\mbox{if } \cos H \geq \frac{\tan \delta}{\tan L} \mbox{ then } |\phi_S | \leq 90\degree \mbox{ else } |\phi_S | \geq 90\degree
+\label{eq:azimuth2}
+\end{equation}
+
+Using the solar angles, the collector angles, and the data on irradiance at each given time, it is possible to find the irradiance the collector experiences.  The model starts with a standard fixed-tilt array at an angle of $\Sigma$ to the ground and facing an azimuth of $\phi_C$.  First, the incidence angle $\theta$ between the collector and the sun must be found:
+
+\begin{equation}
+\cos \theta = \cos \beta \cos \left(\phi_S - \phi_C\right) \sin \Sigma + \sin \beta \cos \Sigma
+\label{eq:theta_fixed}
+\end{equation}
+
+The most important portion of solar generation is the light coming directly from the sun.  The data provides the direct normal irradiance $I_B$, and the actual value on the collector $I_{\mathit{BC}}$ can be easily determined:
+
+\begin{equation}
+I_{\mathit{BC}} = I_B \cos \theta
+\label{eq:direct}
+\end{equation}
+
+The second component of irradiance is from sunlight that has been scattered by the atmosphere.  Using the diffuse irradiance on a horizontal surface $I_{\mathit{DH}}$, the portion of diffuse irradiance "seen" by the collector $I_{\mathit{DC}}$ is:
+
+\begin{equation}
+I_{\mathit{DC}} = I_{\mathit{DH}} \left(\frac{1 + \cos \Sigma}{2}\right)
+\label{eq:diffuse_fixed}
+\end{equation}
+
+The final component of the irradiance is from light that has been reflected off the ground near the panels.  This uses the provided total insolation on a horizontal surface $I_H$ and ground albedo $\rho$ to find the amount "seen" by the collector $I_{\mbox{RC}}$:
+
+\begin{equation}
+I_{\mathit{RC}} = \rho I_H \left(\frac{1 - \cos \Sigma}{2}\right)
+\label{eq:reflected_fixed}
+\end{equation}
+
+The total irradiance on the solar panels $I_C$ is:
+
+\begin{equation}
+I_C = I_{\mathit{BC}} + I_{\mathit{DC}} + I_{\mbox{RC}}
+\label{eq:total_solar}
+\end{equation}
+
+This value divided by the irradiance at standard test conditions of \SI{1000}{\watt\per\meter\squared} and with some efficiency losses removed provides the portion of the solar panel rated capacity that is available at a given time.
+
+The model sought to optimize the tilt angle of the solar panels so that they could provide the most power when they were needed.  Originally, the plan was to include the collector tilt angle and azimuth as two variables in the model.  However, this is a nonlinear problem, and none of the nonlinear solvers given in class had the ability to handle solar tilt optimization and the integer optimization required by the wind turbines (as explained later).\footnote{BARON can handle integer nonlinear problems, but its nonlinear capabilities do not extend to trigonometric functions.  Knitro can handle trigonometry and integers, but as a Mac user I was limited to the trial version, which does not support the required number of variables for optimizing a yearlong model.}.  To resolve this issue, the tilt angle was optimized separately before the remainder of the model.  
+
+This preliminary model was solved using SNOPT, with Equations \ref{eq:theta_fixed} through \ref{eq:total_solar}.  Since they would only serve to slow the solver unnecessarily, Equations \ref{eq:declination} through \ref{eq:azimuth2} were used earlier to create arrays of solar altitude and azimuth angles.  The variables used in this model were the collector tilt and azimuth angles.  To help encourage maximum generation at times when power is needed, the quantity being optimized was sum of the product of generation and load at each hour.  This is not a perfect approach because it does not factor in the effect of storage and wind generation.  However, it seemed like a reasonable compromise between optimizing the total generation (which might instill a preference for generating at times when power is unneeded) and maximizing the Pearson correlation coefficient (which would optimize the similarity between generation and load, but might encourage lower generation).  The only constraints used were limits on the possible angles.
+
+The total generation of a solar panel can be increased by having it track the sun rather than remaining in a fixed position, although this increases the capital and maintenance costs.  The most common tracking approach is to tilt the panels along a north-south axis, so that they can face east in the morning and west in the afternoon, and are horizontal at noon.  In this case, Equations \ref{eq:direct} and \ref{eq:total_solar} remain the same.  However, Equations \ref{eq:theta_fixed}, \ref{eq:diffuse_fixed}, and \ref{eq:reflected_fixed} are replaced by Equations \ref{eq:theta_track}, \ref{eq:diffuse_track}, and \ref{eq:reflected_track}, respectively.
+
+\begin{equation}
+\cos \theta = \sqrt{1 - \left(\cos\beta\cos\phi_S \right)^2}
+\label{eq:theta_track}
+\end{equation}
+
+\begin{equation}
+I_{\mathit{DC}} = I_{\mathit{DH}} \left[\frac{1 + \left(\sin \beta / \cos \theta\right)}{2}\right]
+\label{eq:diffuse_track}
+\end{equation}
+
+\begin{equation}
+I_{\mathit{RC}} = \rho I_H \left[\frac{1 - \left(\sin \beta / \cos \theta\right)}{2}\right]
+\label{eq:reflected_track}
+\end{equation}
+
+To simplify the model and reduce unnecessary calculations, the solar generation values were calculated before.  Using the optimized tilt angles, the capacity factor at each hour throughout the year with a fixed-tilt array was determined.  Afterwards, the capacity factor at each hour for a single-axis tracking array was determined.  These results were stored in arrays that could be used by the main model.
+
+The cost of solar energy was assumed to be proportional to the installed capacity.  The annual cost  was determined by spreading the upfront capital cost over the 25-year lifespan of a typical solar project, assuming that the funding came from a loan with 5\% interest (CRF of 0.07095), then adding the fixed operations and maintenance costs.  
+
+\subsection{Wind Energy Modeling}
+
+The process for modeling the wind generation was simpler.  Wind turbine power generation is generally a function of the wind speed, and can be represented using a power curve.  When wind speeds are below the cut-in speed, turbines are unable to generate any power; when wind speeds are too high the turbine must stop itself to prevent damage.  Generation initially rises with increasing wind speed, then plateaus above the rated capacity.
+
+To determine the wind generation, the wind speed given in the data was converted to generation using the power curve.  Speeds outside the range used in the power curve were set to zero, while speeds in the range covered by the power curve were converted to generation by interpolating the power curve.  As with solar energy, these calculations were performed outside of the model and saved in an array.  These calculations needed to be performed separately for each model type.
+
+Modeling the costs of the wind turbines was more complicated.  Wind turbines experience significant economies of scale; the cost per kW of capacity of a 2-MW turbine is far lower than the unit cost of a 50-kW turbine.  The unit cost for each size of wind turbine was determined using a model developed by VanderMeer, Mueller-Stoffels, and Whitney.\cite{VanderMeer2017}  The total cost $Y_i$ (in \$/kW) for turbine $i$ with capacity $X_i$ (in kW) is given by the following, with $\beta_{0,i} = 12.9$, $\beta_{1,i} = -0.77$, $\beta_{2,i} = 0.028$, and an error term $\epsilon_i$.
+
+\begin{equation}
+\ln\left(Y_i\right) = \beta_{0,i} + \beta_{1,i} \ln\left(X_i\right) + \beta_{2,i} \ln\left(X_i\right)^2 + \epsilon_i
+\label{eq:wind_scaling}
+\end{equation}
+
+This formula gives costs for large-scale turbines that are far in excess of the current accepted costs (possibly due to the study being based in Alaska), so the costs were scaled to better align with current prices.  Upfront costs were annualized using the same 5\% loan, but with a reduced lifespan of 20 years (CRF = 0.08024).  VanderMeer, Mueller-Stoffels, and Whitney found no significant relationship between size and maintenance cost per kW, so the accepted standard value was used.  These costs were multiplied by the turbine capacity to find the cost per turbine, then multiplied by the number of turbines.
+
+\subsection{Battery Storage Modeling}
+
+At any time, the battery can store excess generation or provide additional power to the grid.  The power provided to the grid is reduced by round-trip losses.  The energy stored at any time $S_t$ must always move with the power inputs $s^{in}_t$ and outputs $s^{out}_t$:
+
+\begin{equation}
+S_t = S_{t-1} + s^{in}_t - s^{out}_t
+\label{eq:battery}
+\end{equation}
+
+Battery cost is a combination of upfront capital costs and the cost due to battery degradation.  Capital costs are proportional to capacity, and are annualized over 20 years with 5\% interest.  Degradation costs account for the fact that batteries decline with use and must eventually be replaced.  This uses the approach from Homework 4:
+
+\begin{equation}
+c_{\mathit{cap}} = C_{\mathit{cap}} \times \frac{D_c}{L_c}
+\label{eq:battery_cost}
+\end{equation}
+
+$c_{\mathit{cap}}$ is the cost of degradation (in \$/kWh), $C_{\mathit{cap}}$ is the capital cost of the battery (in \$/kWh), $D_c$ is the number or charge cycles, and $L_c$ is the cycle lifetime of the battery.  Since the number of cycles is affected by battery capacity, this effectively means that the cost of degradation is the total energy passing through the battery divided by the cycle lifetime and multiplied by the unit cost of capacity.  This combination of capital and degradation costs seems like the best compromise between two unrealistic extremes: just using upfront capital costs and thus having no incentive to limit unnecessary cycling, or just using degradation and having no reason to limit total battery capacity.\footnote{When upfront costs were ignored, the optimal solution was around 85,000 kWh of battery capacity, which is laughably unrealistic for a microgrid of this size.}
+
+\subsection{Overall model design}
+
+Since the calculations mostly involved multiplying a capacity by a unit cost or by a capacity factor, this problem could be solved using linear optimization.  The primary decision variables used in the model were the solar, wind, and battery capacities.  While solar and battery capacity can reasonably be approximated as continuous variables due to each individual unit being small compared to the number needed for this microgrid, the number of wind turbines needed to be an integer variable because of the small size of the load relative to the wind turbine capacities.  Additionally, there were time-based variables to determine the battery charge, discharge, and current state of charge.  While these made the model dependent on time, they only served to allow calculations on battery use, and were not the ultimate goal of the model.  Due to the need to handle integer variables, CBC was chosen as the solver.
+
+The objective function for the solver was the sum of the solar, wind, and battery costs.  The most important constraint was that at every hour, the total generation plus the net battery discharge had to be greater than the load.  Additionally, at every hour the total of the generation and the energy stored in the battery needed to be at least 15\% greater than the load to provide better reliability.  Additional constraints ensured that the batteries behaved properly and that the battery finished the year with the same charge it started with (to approximate an annual cycle).
+
+This model was then run for each combination of wind turbine size and fixed or tracking solar panels.  While the original intent was to include these as integer variables in the solver, the structure of the equations meant that the solver would become nonlinear, and the limited number of choices meant it was reasonable to run the solver repeatedly.  After each iteration, the solver would record the results under the given conditions.  After all ten iterations had been run, the solver would identify the best solution and share its results.
+
+\section{Data}
+
+In order to accurately determine the capabilities of generators, the model required insolation and wind speed data.  These were both obtained from the National Renewable Energy Laboratory (NREL).  The solar data was obtained from the National Solar Radiation Database (NSRDB).\cite{NSRDB}  The NSRDB provides insolation at the hour and half-hour marks from 1998 to 2017 at a wide array of locations throughout the country.  It includes direct normal, diffuse horizontal, and global horizontal irradiance, as well as ground albedo.  It also includes other weather data like temperature, humidity and wind speeds on the ground that might be useful with a more complex model.  Again, the specific data from this set being used was DNI, DHI, GHI, and albedo at each hour in 2013.\footnote{Half-hour data was not used to maintain compatibility with other data that was only available for whole hours.}
+
+The wind data came from the Wind Integration National Dataset (WIND) Toolkit.\cite{WIND}  This data is available at each hour from 2007 to 2012.  However, using NREL's System Advisor Model tool, it is also possible to obtain 2013 data.  This data set includes wind speed and direction at multiple heights up to 200 m, as well as air characteristics like temperature and density that may be useful for more complex models.  The only data used from this set was the wind speeds.  A height of 40 m was chosen, as that is a similar range to most of the turbines being considered.  It should be noted that according to the map on the WIND Toolkit website, the specific location may be a few miles away and thus more representative of offshore wind than onshore wind.  However, due to the small size of Monhegan Island it is unlikely there is a significant reduction in wind speed on shore.
+
+The wind turbine power curves were obtained from NREL's System Advisor Model tool (SAM).  SAM simulates renewable generation using weather data and system design parameters.  It also can perform financial modeling with the results.  The wind turbine model has access to power curves for a huge range of wind turbines, which could be saved into a csv format.  SAM was also used to gain an approximation for the efficiency losses in the solar panels
+
+Ideally, this project would have used hourly load data from Monhegan Island.  However, while the person I contacted who works for their local utility initially said he would send me some data, it ultimately was never sent, and the only publicly available data was a basic fact sheet\cite{NE_Energy_Reports} and two graphs from a presentation\cite{Monhegan_Presentation}, shown in Figures \ref{fig:winter_load} and \ref{fig:summer_load}.  To fill the gap between the three days in December and three days in August, data from ISO New England was used.  ISO-NE provides historical hourly load data for up to 7 years (currently from March 2012 to the present).\cite{ISO}  To approximate the summer-winter split, the ISO load for the summer (from a few days before Memorial Day to a few days after Labor Day) was multiplied by a factor such that the loads would match on the given days in August, and the ISO load for the rest of the year was multiplied by a factor such that the loads would match on the given days in December.
+
+The PV and wind turbine cost data was primarily taken from Lazard's most recent Levelized Cost of Electricity Analysis.\cite{Lazard2018}  The costs are given as a range of possible values, so some judgement was necessary.  The capital and maintenance costs of solar used were towards the high range of community-scale solar.  The cost range given for utility-scale solar represents the difference between fixed-tilt and single-axis tracking, from which it was possible to determine that tracking increases the capital and maintenance costs by about 32\%.  Again, the wind turbine cost scaling was determined from VanderMeer, Mueller-Stoffels, and Whitney 2017, although the cost was reduced by a factor of three to match Lazard's data for utility-scale turbines.
+
+Battery cost data was from the sources given in Homework 4: Lu 2009, Makarov 2008, EPRI 2003.  Lazard does have a levelized cost of storage study, but the data was based on 4-hour storage and given in terms of power capacity rather than energy capacity, and thus was less applicable to a project with storage that can last almost a full day.
+
+\section{Results}
+
+The parameters of the optimal microgrid are given in Table \ref{tab:results}.
+
+\begin{table}[H]
+\centering
+\caption{Optimized microgrid parameters}
+\label{tab:results}
+\begin{tabular}{|c|c|}
+\hline
+Turbine size & 50 kW \\
+\hline
+Solar type & Fixed-tilt \\
+\hline
+PV Tilt Angle & 23.02\degree \\
+\hline
+PV Azimuth Angle & -6.89\degree \\
+\hline
+Number of wind turbines & 1 \\
+\hline
+Solar capacity & 397 kW \\
+\hline
+Battery Capacity & 3453 kWh \\
+\hline
+Total cost & \$189,797/year \\
+\hline
+LCOE & \$0.5136/kWh \\
+\hline
+\end{tabular}
+\end{table}
+
+The optimal wind turbine size is towards the middle of the sizes being investigated, and has a nameplate capacity that is between the winter and summer loads.  It is reasonable that a smaller wind turbine would not be ideal, because the unit cost of small wind turbines is significantly higher than that of larger-scale wind turbines.  Also, larger wind turbines or having two wind turbines does not fit well with the load profile, as will be shown below.
+
+It is also reasonable for fixed-tilt solar energy to be more cost-effective than single-axis tracking PVs.  There is a significant cost increase when adding tracking, which normally is offset by the increased generation.  However, the dramatically reduced load in the winter means that much of the increased generation ultimately would be wasted.
+
+The PV angles are clearly affected by the desire to have generation match load.  At relatively high latitudes like those in Maine, it typically is beneficial to have a higher tilt angle to better collect radiation when the sun is low in the sky during winter months.  Since the load on Monhegan Island is much larger during the summer, it makes more sense to focus on maximizing generation in summer months, when the sun is high in the sky.  Also, it is typical to have solar panels face due south to maximize their daily exposure.  However, the optimal azimuth angle is slightly to the west.  This is again due to the timing of the load: load tends to peak in late afternoon/early evening, so providing power at that time is more important than providing power in the morning.
+
+The battery capacity is extremely large. Using the summer average implied by the three given days in August of 80 kW, 3453 kWh is enough to hold energy for 43 hours or almost two days.  However, this makes a reasonable amount of sense: islands in Maine can be subject to storms and other bad weather that can shut down solar generation for long periods, and the microgrid needs to be able to provide adequate power for those events and for the next ones if there has not been time for the grid to recover.
+
+Finally, the levelized cost of electricity is still much higher than the national average.  This is likely due to the need to build large amounts of generation to support summer loads that will ultimately go unused in the winter.   However, this is still significantly less expensive than current electricity prices on Monhegan Island, so this microgrid would definitely be an improvement.
+
+The following collection of graphs shows some of the time-based data to help provide further insights.  Figure \ref{generation} shows the average generation profile for each month.  Effectively, this means that the first data point is the average power from 12-1 am for each day of January, the second data point is the average power from 1-2 am for each day of January, and so on.  The x-axis numbers are located at the start of the typical day for each month.  Unsurprisingly, solar energy displays a relatively cyclical pattern of high generation during the day and no generation at night, and stronger generation during summer months than during winter months.  Wind generation is shows some level of higher strength at night, but is more consistent throughout the day.  Wind tends to be stronger towards the winter than towards the summer.
+
+\begin{figure}[htb]
+\begin{center}
+\includegraphics[width=0.6\textwidth]{generation.png}
+\caption{Average daily wind and solar generation profiles for each month}
+\label{fig:generation}
+\end{center}
+\end{figure}
+
+Figure \ref{stack} shows the interaction between generation, storage, and load as average daily profiles for each month.  It should be noted that the green "Battery Charge" area is not generation being stacked on top; it is showing the portion of excess generation that is being stored.  If the battery charging were not there, it would be replaced by solar generation giving the same overall shape.  This serves to demonstrate how much of a challenge the load pattern is.  During winter months, the load is typically not enough to even use up all of the wind energy, let alone solar energy.   However, during summer months wind the generation ultimately becomes more useful.  It still does not match the load extremely well (note the narrow solar peaks within the wider load peaks), but battery storage is doing much to help move energy to later hours so that supply and demand are more in-sync.
+
+\begin{figure}[htb]
+\begin{center}
+\includegraphics[width=0.6\textwidth]{stack.png}
+\caption{Average daily generation and load profile for each month}
+\label{fig:stack}
+\end{center}
+\end{figure}
+
+Figure \ref{fig:storage} shows the typical profile of charge currently stored in the battery.  It is clear that the battery does not store energy to move between seasons, which is reasonable given the massive battery size needed for such an application.  The low load during winter months that rarely exceeds generation means that the battery has little reason to charge to any significant amount during that time.  During summer and especially during July, when load grows, the average energy stored in the battery grows to account for the increasing likelihood of load exceeding generation.  There is a clear daily pattern of charging throughout daytime and then discharging at night, although the visual is complicated by the jumps between months.
+
+\begin{figure}[htb]
+\begin{center}
+\includegraphics[width=0.6\textwidth]{storage.png}
+\caption{Average daily battery state-of-charge profiles for each month}
+\label{fig:storage}
+\end{center}
+\end{figure}
+
+\section{Sensitivity}
+
+Since I was ultimately unable to obtain detailed electric load data for Monhegan Island, the load being used is extremely unreliable.  To explore the impact of this load, the model was run two more times under different load parameters: once where the full year's data was multiplied by the winter load factor, and once where the full year's data was multiplied by the summer load factor.  Both of these demonstrate more traditional year-round use, although at two different scales.
+
+\begin{table}[htb]
+\centering
+\caption{Optimized microgrid parameters for winter load}
+\label{tab:winter}
+\begin{tabular}{|c|c|}
+\hline
+Turbine size & 50 kW \\
+\hline
+Solar type & Fixed-tilt \\
+\hline
+PV Tilt Angle & 32.95\degree \\
+\hline
+PV Azimuth Angle & -3.75\degree \\
+\hline
+Number of wind turbines & 1 \\
+\hline
+Solar capacity & 70.9 kW \\
+\hline
+Battery Capacity & 954 kWh \\
+\hline
+Total cost & \$71,393/year \\
+\hline
+LCOE & \$0.3413/kWh \\
+\hline
+\end{tabular}
+\end{table}
+
+Table \ref{tab:winter} shows the optimal microgrid design if Monhegan Island's load matched its winter load year-round, and Table \ref{tab:summer} shows the optimal design if the load matched the summer load year-round.  None of the experiments with different load profiles change the fundamental economics of 50 kW turbines and fixed-tilt solar.  In both cases, the optimal tilt angle became higher, as collecting energy during the winter gained in importance relative to collecting energy in the summer.  A year-round load shows a shift towards wind power due to its enhanced strength in winter: a winter load still keeps the wind turbine while significantly cutting solar energy, while a summer load swaps over a quarter of the solar panels for an additional wind turbine.
+
+\begin{table}[htb]
+\centering
+\caption{Optimized microgrid parameters for summer load}
+\label{tab:summer}
+\begin{tabular}{|c|c|}
+\hline
+Turbine size & 50 kW \\
+\hline
+Solar type & Fixed-tilt \\
+\hline
+PV Tilt Angle & 32.95\degree \\
+\hline
+PV Azimuth Angle & -3.75\degree \\
+\hline
+Number of wind turbines & 2 \\
+\hline
+Solar capacity & 281 kW \\
+\hline
+Battery Capacity & 3,378 kWh \\
+\hline
+Total cost & \$205,341/year \\
+\hline
+LCOE & \$0.2986/kWh \\
+\hline
+\end{tabular}
+\end{table}
+
+The year-round load is much more economically efficient.  LCOE drops from \$0.51/kWh to \$0.34/kWh for the winter load case, and to \$0.30/kWh for the summer load case.  This is a result of the generation being useful more of the time, rather than spending much of its time being wasted.  The improved cost of the summer load compared to the winter load is due to economies of scale and to one wind turbine being possibly more than ideal for winter load.  One interesting result is that year-round summer load would only increase the cost by \$15,000 per year, despite the massive increase in total electricity use.
+
+\section{Discussion}
+
+There were some initial difficulties with making the storage work properly, and particularly with identifying the proper starting conditions.  However, they were relatively easy to resolve, and assembling the preliminary model that just looked at quantities of solar, wind, and storage was reasonably smooth.  Adding the other variables proved challenging, as they often interfered with the function of the solvers.  Descriptions of the challenges and their ultimate resolutions are given in the Methods section.
+
+The most obvious next step for this project would be to obtain accurate load data.  As the sensitivity analysis made clear, the load profile has a massive impact on the optimal system design and cost.  Therefore, to truly optimize this system, it would be necessary to determine how the transition between summer and winter load occurs.
+
+Another similar aspect to look into is considering more years.  It is possible that this one year has lower-than-average peak load or that sunlight and load tend to match better than usual, and therefore it is possible that the microgrid designed for this year's data would not be suitably reliable in future years.  There would be challenges in finding data that overlaps, but if Monhegan Island load data can be obtained for prior year, resource data is already available, and it is also possible that wind data does not need to precisely match the year being examined.
+
+Finally, the model could be improved with better cost modeling.  The cost of each grid component shows potential significant variability, and likely depends on the specifics of the project.  It would be particularly useful to investigate the cost of different use patterns with a low-power high-storage battery like the one a microgrid needs.  Unfortunately, improved cost data would be quite difficult to obtain short of embarking on actually building this project and being able to receive quotes from manufacturers and installers.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\end{document}
